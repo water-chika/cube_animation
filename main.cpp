@@ -16,192 +16,6 @@ public:
 };
 
 template<class T>
-class record_swapchain_command_buffers_fast_debug : public T {
-public:
-	using parent = T;
-	record_swapchain_command_buffers_fast_debug() {
-		create();
-	}
-	void create() {
-		auto buffers = parent::get_swapchain_command_buffers();
-		auto swapchain_images = parent::get_swapchain_images();
-		auto queue_family_index = parent::get_queue_family_index();
-		auto render_images = parent::get_intermediate_images();
-		auto unsampled_images = parent::get_images();
-		auto image_extent = parent::get_image_extent();
-
-		auto clear_color_value_type = parent::get_format_clear_color_value_type(parent::get_image_format());
-		using value_type = decltype(clear_color_value_type);
-		std::map<value_type, vk::ClearColorValue> clear_color_values{
-			{value_type::eFloat32, vk::ClearColorValue{}.setFloat32({0.1f,0.0f,0.0f,0.0f})},
-			{value_type::eUint32, vk::ClearColorValue{}.setUint32({0,0,0,0})},
-		};
-		if (!clear_color_values.contains(clear_color_value_type)) {
-			throw std::runtime_error{ "unsupported clear color value type" };
-		}
-		vk::ClearColorValue clear_color_value{ clear_color_values[clear_color_value_type] };
-
-		if (buffers.size() != swapchain_images.size()) {
-			throw std::runtime_error{ "swapchain images count != command buffers count" };
-		}
-		uint32_t index = 0;
-		for (uint32_t index = 0; index < buffers.size(); index++) {
-			vk::Image swapchain_image = swapchain_images[index];
-			vk::Image render_image = render_images[index];
-			vk::Image unsampled_image = unsampled_images[index];
-			vk::CommandBuffer buffer = buffers[index];
-
-			buffer.begin(
-				vk::CommandBufferBeginInfo{}
-			);
-			buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eAllCommands,
-				vk::PipelineStageFlagBits::eAllCommands,
-				{},
-				{},
-				{},
-				vk::ImageMemoryBarrier{}
-				.setImage(render_image)
-				.setOldLayout(vk::ImageLayout::eUndefined)
-				.setNewLayout(vk::ImageLayout::eTransferDstOptimal)
-				.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setDstAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setSrcQueueFamilyIndex(queue_family_index)
-				.setDstQueueFamilyIndex(queue_family_index)
-				.setSubresourceRange(
-					vk::ImageSubresourceRange{}
-					.setAspectMask(vk::ImageAspectFlagBits::eColor)
-					.setLayerCount(1)
-					.setLevelCount(1)
-				)
-			);
-			buffer.clearColorImage(
-				render_image,
-				vk::ImageLayout::eTransferDstOptimal,
-				clear_color_value,
-				vk::ImageSubresourceRange{}
-				.setAspectMask(vk::ImageAspectFlagBits::eColor)
-				.setLayerCount(1)
-				.setLevelCount(1));
-			buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eAllCommands,
-				vk::PipelineStageFlagBits::eAllCommands,
-				{}, {}, {},
-				vk::ImageMemoryBarrier{}
-				.setImage(render_image)
-				.setOldLayout(vk::ImageLayout::eTransferDstOptimal)
-				.setNewLayout(vk::ImageLayout::eTransferSrcOptimal)
-				.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setDstAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setSrcQueueFamilyIndex(queue_family_index)
-				.setDstQueueFamilyIndex(queue_family_index)
-				.setSubresourceRange(
-					vk::ImageSubresourceRange{}
-					.setAspectMask(vk::ImageAspectFlagBits::eColor)
-					.setLayerCount(1)
-					.setLevelCount(1)
-				)
-			);
-			buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eAllCommands,
-				vk::PipelineStageFlagBits::eAllCommands,
-				{}, {}, {},
-				vk::ImageMemoryBarrier{}
-				.setImage(unsampled_image)
-				.setOldLayout(vk::ImageLayout::eUndefined)
-				.setNewLayout(vk::ImageLayout::eTransferDstOptimal)
-				.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setDstAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setSrcQueueFamilyIndex(queue_family_index)
-				.setDstQueueFamilyIndex(queue_family_index)
-				.setSubresourceRange(
-					vk::ImageSubresourceRange{}
-					.setAspectMask(vk::ImageAspectFlagBits::eColor)
-					.setLayerCount(1)
-					.setLevelCount(1)
-				)
-			);
-			buffer.resolveImage(render_image, vk::ImageLayout::eTransferSrcOptimal, unsampled_image, vk::ImageLayout::eTransferDstOptimal,
-				vk::ImageResolve{}
-				.setSrcSubresource(vk::ImageSubresourceLayers{}.setLayerCount(1).setAspectMask(vk::ImageAspectFlagBits::eColor))
-				.setDstSubresource(vk::ImageSubresourceLayers{}.setLayerCount(1).setAspectMask(vk::ImageAspectFlagBits::eColor))
-				.setExtent(image_extent)
-			);
-			buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eAllCommands,
-				vk::PipelineStageFlagBits::eAllCommands,
-				{}, {}, {},
-				vk::ImageMemoryBarrier{}
-				.setImage(unsampled_image)
-				.setOldLayout(vk::ImageLayout::eTransferDstOptimal)
-				.setNewLayout(vk::ImageLayout::eTransferSrcOptimal)
-				.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setDstAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setSrcQueueFamilyIndex(queue_family_index)
-				.setDstQueueFamilyIndex(queue_family_index)
-				.setSubresourceRange(
-					vk::ImageSubresourceRange{}
-					.setAspectMask(vk::ImageAspectFlagBits::eColor)
-					.setLayerCount(1)
-					.setLevelCount(1)
-				)
-			);
-			buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eAllCommands,
-				vk::PipelineStageFlagBits::eAllCommands,
-				{}, {}, {},
-				vk::ImageMemoryBarrier{}
-				.setImage(swapchain_image)
-				.setOldLayout(vk::ImageLayout::eUndefined)
-				.setNewLayout(vk::ImageLayout::eTransferDstOptimal)
-				.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setDstAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setSrcQueueFamilyIndex(queue_family_index)
-				.setDstQueueFamilyIndex(queue_family_index)
-				.setSubresourceRange(
-					vk::ImageSubresourceRange{}
-					.setAspectMask(vk::ImageAspectFlagBits::eColor)
-					.setLayerCount(1)
-					.setLevelCount(1)
-				)
-			);
-			vk::Offset3D image_end{ static_cast<int32_t>(image_extent.width), static_cast<int32_t>(image_extent.height), static_cast<int32_t>(image_extent.depth) };
-			buffer.blitImage(unsampled_image, vk::ImageLayout::eTransferSrcOptimal, swapchain_image, vk::ImageLayout::eTransferDstOptimal,
-				vk::ImageBlit{}
-				.setSrcSubresource(vk::ImageSubresourceLayers{}.setLayerCount(1).setAspectMask(vk::ImageAspectFlagBits::eColor))
-				.setDstSubresource(vk::ImageSubresourceLayers{}.setLayerCount(1).setAspectMask(vk::ImageAspectFlagBits::eColor))
-				.setSrcOffsets(std::array{ vk::Offset3D{ 0,0,0 }, image_end })
-				.setDstOffsets(std::array{ vk::Offset3D{ 0,0,0 }, image_end }),
-				vk::Filter::eNearest
-			);
-			buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eAllCommands,
-				vk::PipelineStageFlagBits::eAllCommands,
-				{}, {}, {},
-				vk::ImageMemoryBarrier{}
-				.setImage(swapchain_image)
-				.setOldLayout(vk::ImageLayout::eTransferDstOptimal)
-				.setNewLayout(vk::ImageLayout::ePresentSrcKHR)
-				.setSrcAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setDstAccessMask(vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite)
-				.setSrcQueueFamilyIndex(queue_family_index)
-				.setDstQueueFamilyIndex(queue_family_index)
-				.setSubresourceRange(
-					vk::ImageSubresourceRange{}
-					.setAspectMask(vk::ImageAspectFlagBits::eColor)
-					.setLayerCount(1)
-					.setLevelCount(1)
-				)
-			);
-			buffer.end();
-		}
-	}
-	void destroy() {
-
-	}
-};
-
-template<class T>
 class record_swapchain_command_buffers_cube : public T {
 public:
 	using parent = T;
@@ -271,7 +85,7 @@ public:
 				vk::PipelineBindPoint::eGraphics,
 				pipeline
 			);
-			vk::Buffer vertex_buffer = parent::get_vertex_buffer();
+			vk::Buffer vertex_buffer = parent::get_vertex_buffer_vector()[index];
 			cmd.bindVertexBuffers(0,
 				vertex_buffer, vk::DeviceSize{ 0 });
 			vk::Buffer index_buffer = parent::get_index_buffer();
@@ -283,73 +97,6 @@ public:
 			cmd.drawIndexed(3 * 2 * 3 * 2, 1, 0, 0, 0);
 			cmd.endRenderPass();
 			cmd.end();
-		}
-	}
-	void destroy() {
-
-	}
-};
-template<class T>
-class record_swapchain_command_buffers : public T {
-public:
-	using parent = T;
-	record_swapchain_command_buffers() {
-		create();
-	}
-	void create() {
-		auto buffers = parent::get_swapchain_command_buffers();
-		auto swapchain_images = parent::get_swapchain_images();
-		auto queue_family_index = parent::get_queue_family_index();
-		auto framebuffers = parent::get_framebuffers();
-
-		if (buffers.size() != swapchain_images.size()) {
-			throw std::runtime_error{ "swapchain images count != command buffers count" };
-		}
-		uint32_t index = 0;
-		for (uint32_t index = 0; index < buffers.size(); index++) {
-			vk::Image swapchain_image = swapchain_images[index];
-			vk::CommandBuffer buffer = buffers[index];
-
-			buffer.begin(
-				vk::CommandBufferBeginInfo{}
-			);
-			vk::RenderPass render_pass = parent::get_render_pass();
-
-			vk::Extent2D swapchain_image_extent = parent::get_swapchain_image_extent();
-			auto render_area = vk::Rect2D{}.setOffset(vk::Offset2D{ 0,0 }).setExtent(swapchain_image_extent);
-			vk::Framebuffer framebuffer = framebuffers[index];
-			buffer.beginRenderPass(
-				vk::RenderPassBeginInfo{}
-				.setRenderPass(render_pass)
-				.setRenderArea(render_area)
-				.setFramebuffer(framebuffer),
-				vk::SubpassContents::eInline
-			);
-			auto clear_color_value_type = parent::get_format_clear_color_value_type(parent::get_swapchain_image_format());
-			using value_type = decltype(clear_color_value_type);
-			std::map<value_type, vk::ClearColorValue> clear_color_values{
-				{value_type::eFloat32, vk::ClearColorValue{}.setFloat32({1.0f,0.0f,0.0f,0.0f})},
-				{value_type::eUint32, vk::ClearColorValue{}.setUint32({255,0,0,0})},
-			};
-			if (!clear_color_values.contains(clear_color_value_type)) {
-				throw std::runtime_error{ "unsupported clear color value type" };
-			}
-			vk::ClearColorValue clear_color_value{ clear_color_values[clear_color_value_type] };
-			buffer.clearAttachments(
-				vk::ClearAttachment{}.setAspectMask(vk::ImageAspectFlagBits::eColor)
-				.setClearValue(vk::ClearValue{}.setColor(clear_color_value)),
-				vk::ClearRect{}
-			.setLayerCount(1)
-				.setRect(vk::Rect2D{}
-			.setExtent(swapchain_image_extent)));
-			vk::Pipeline pipeline = parent::get_pipeline();
-			buffer.bindPipeline(
-				vk::PipelineBindPoint::eGraphics,
-				pipeline
-			);
-			parent::command_buffer_draw(buffer);
-			buffer.endRenderPass();
-			buffer.end();
 		}
 	}
 	void destroy() {
@@ -500,7 +247,7 @@ namespace windows_helper {
 			int height = parent::get_window_height();
 			int window_style = parent::get_window_style();
 			m_window = CreateWindowA(
-				(LPCSTR)parent::get_window_class(), "draw_pixels", window_style, CW_USEDEFAULT, CW_USEDEFAULT,
+				(LPCSTR)parent::get_window_class(), "snake", window_style, CW_USEDEFAULT, CW_USEDEFAULT,
 				width, height, NULL, NULL, GetModuleHandle(NULL), parent::get_lparam());
 			if (m_window == NULL) {
 				throw std::runtime_error("failed to create window");
@@ -902,9 +649,33 @@ private:
 		vk::RenderPass m_render_pass;
 	};
 	template<class T>
+	class adjust_draw_rate : public T {
+	public:
+		using parent = T;
+		adjust_draw_rate() {
+			m_start_time = std::chrono::steady_clock::now();
+		}
+		void draw() {
+			using namespace std::literals;
+			auto duration = std::chrono::steady_clock::now() - m_start_time;
+			auto frame_duration = parent::get_frame_index() * 100ms;
+			using CT = std::common_type<decltype(duration), decltype(frame_duration)>::type;
+			CT d = duration;
+			CT fd = frame_duration;
+			if (operator<(fd, d)) {
+				parent::draw();
+			}
+		}
+	private:
+		std::chrono::steady_clock::time_point m_start_time;
+	};
+	template<class T>
 	class add_dynamic_draw : public T {
 	public:
 		using parent = T;
+		add_dynamic_draw() {
+			
+		}
 		void draw() {
 			vk::Device device = parent::get_device();
 			vk::SwapchainKHR swapchain = parent::get_swapchain();
@@ -946,6 +717,29 @@ private:
 			device.flushMappedMemoryRanges(
 				vk::MappedMemoryRange{}
 				.setMemory(upload_memory)
+				.setOffset(0)
+				.setSize(vk::WholeSize)
+			);
+
+			void* vertex_ptr = parent::get_vertex_buffer_memory_ptr_vector()[index];
+			auto vertices = std::array{
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f, 1.0f,
+	-1.0f, 1.0f, -1.0f,
+	-1.0f, 1.0f, 1.0f,
+	1.0f, -1.0f, -1.0f,
+	1.0f, -1.0f, 1.0f,
+	1.0f, 1.0f, -1.0f,
+	1.0f, 1.0f, 1.0f,
+			};
+			std::ranges::for_each(vertices,
+				[frame_index=m_frame_index](float& v) {
+					v *= 1/60.0 * (frame_index % 60);
+				});
+			memcpy(vertex_ptr, vertices.data(), vertices.size() * sizeof(vertices[0]));
+			device.flushMappedMemoryRanges(
+				vk::MappedMemoryRange{}
+				.setMemory(parent::get_vertex_buffer_memory_vector()[index])
 				.setOffset(0)
 				.setSize(vk::WholeSize)
 			);
@@ -992,13 +786,18 @@ private:
 			vk::Queue queue = parent::get_queue();
 			queue.waitIdle();
 		}
+		auto get_frame_index() {
+			return m_frame_index;
+		}
 	private:
 		uint64_t m_frame_index = 0;
 	};
 
+
 	using draw_cube_app =
 		add_window_loop <
 		jump_draw_if_window_minimized <
+		adjust_draw_rate<
 		add_dynamic_draw <
 		add_acquire_next_image_semaphores <
 		add_acquire_next_image_semaphore_fences <
@@ -1036,9 +835,14 @@ private:
 		add_buffer_usage<vk::BufferUsageFlagBits::eUniformBuffer,
 		empty_buffer_usage<
 		set_buffer_size<sizeof(uint64_t),
-		add_buffer_memory_with_data_copy <
-		rename_buffer_to_vertex_buffer<
-		add_buffer_as_member <
+		rename_buffer_memory_ptr_vector_to_vertex_buffer_memory_ptr_vector<
+		map_buffer_memory_vector<
+		rename_buffer_memory_vector_to_vertex_buffer_memory_vector<
+		add_buffer_memory_vector <
+		set_buffer_memory_properties < vk::MemoryPropertyFlagBits::eHostVisible,
+		rename_buffer_vector_to_vertex_buffer_vector<
+		add_buffer_vector <
+		set_vector_size_to_swapchain_image_count <
 		set_buffer_usage<vk::BufferUsageFlagBits::eVertexBuffer,
 		add_cube_vertex_buffer_data <
 		add_recreate_surface_for_pipeline <
@@ -1157,78 +961,9 @@ private:
 		>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> >
 		>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> >
 		>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-		>>>>>>>>>>>>>>>>>>>>>>>>>>>
+		>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 		;
-using clear_debug_app = 
-	add_window_loop <
-	jump_draw_if_window_minimized <
-	add_draw <
-	add_acquire_next_image_semaphores <
-	add_acquire_next_image_semaphore_fences <
-	add_draw_semaphores <
-	add_recreate_surface_for <
-	record_swapchain_command_buffers_fast_debug <
-	add_get_format_clear_color_value_type <
-	add_recreate_surface_for <
-	add_swapchain_command_buffers <
-	add_command_pool <
-	add_queue <
-	add_recreate_surface_for_images_memories <
-	add_images_memories <
-	add_recreate_surface_for_images <
-	add_images <
-	set_image_samples < vk::SampleCountFlagBits::e1,
-	rename_images <
-	add_recreate_surface_for_images_memories <
-	add_images_memories <
-	add_image_memory_property < vk::MemoryPropertyFlagBits::eDeviceLocal,
-	add_empty_image_memory_properties <
-	add_recreate_surface_for_images <
-	add_images <
-	set_image_tiling < vk::ImageTiling::eOptimal,
-	add_image_usage < vk::ImageUsageFlagBits::eTransferDst,
-	add_image_usage < vk::ImageUsageFlagBits::eTransferSrc,
-	add_empty_image_usages <
-	add_image_count_equal_swapchain_image_count <
-	add_image_format < vk::Format::eR32G32B32A32Sfloat,
-	add_image_extent_equal_swapchain_image_extent <
-	add_image_type < vk::ImageType::e2D,
-	set_image_samples < vk::SampleCountFlagBits::e8,
-	add_recreate_surface_for_swapchain_images_views <
-	add_swapchain_images_views <
-	add_recreate_surface_for_swapchain_images <
-	add_swapchain_images <
-	add_recreate_surface_for_swapchain <
-	add_swapchain <
-	add_swapchain_image_extent_equal_surface_current_extent <
-	add_swapchain_image_format <
-	add_device <
-	add_swapchain_extension <
-	add_empty_extensions <
-	add_find_properties <
-	cache_physical_device_memory_properties<
-	add_recreate_surface_for_cache_surface_capabilites<
-	cache_surface_capabilities<
-	add_recreate_surface_for<
-	test_physical_device_support_surface<
-	add_queue_family_index <
-	add_physical_device<
-	add_recreate_surface<
-	vulkan_windows_helper::add_windows_surface<
-	add_instance<
-	add_win32_surface_extension<
-	add_surface_extension<
-	add_empty_extensions<
-	add_window<
-	adjust_window_resolution<
-	set_window_resolution<151, 151,
-	set_window_style<WS_OVERLAPPEDWINDOW,
-	add_window_class<
-	add_window_process<
-	empty_class
-	>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>>>
-	;
+
 
 int main() {
 	try {
